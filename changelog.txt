@@ -1,0 +1,28 @@
+set a limit for consequent rotations
+set a window for rotations
+make lines thickers
+
+1 March
+Change final reward based on the coverage percents
+
+6 March
+Add null action
+
+9 March
+move the curser to the right corner
+
+13 March
+make convnets smaller (half of original size) ## it didn't work
+change coverage cut off to 98 percents
+
+7 April 
+decrease input size from 84 to 42
+increase batch size from 32 to 64
+
+12April
+design shapes to have proper degree --> good result
+
+25 April
+change the reward function in a way that repeated lines does not seem that much dangerous because the goal is to draw numbers
+
+ 
