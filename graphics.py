@@ -22,8 +22,8 @@ config = {
     "target_channel": 2,
     "helper_channel": 3,
     "draw_reward": 20,
-    "prospect_reward": 3,
-    "draw_punish": 5,
+    "prospect_reward": [1300, 1100, 500],
+    "draw_punish": 55,
     "time_punish": 5,
     "use_gpu_array": False,
     "target_line_width": 6,
@@ -32,8 +32,8 @@ config = {
     "recent_actions_history": 30,
     "rotate_degree": 90,
     "polygon_size": 4,
-    "width": 10,
-    "prospect_length":10
+    "prospect_width": 7,
+    "prospect_length":[10, 20, 35],
 }
 
 if config["use_gpu_array"]:
@@ -123,7 +123,7 @@ class Graphics:
                     if self.pixels[x,y, config['helper_channel']]==FULL:
                         return -1*config['draw_punish']
                     else:
-                        return -0.2*config['draw_punish']
+                        return -0.015*config['draw_punish']
             else:
                 return -1*config['draw_punish']
         except IndexError:
@@ -157,8 +157,6 @@ class Graphics:
                         good_points_counter += 1
                     self.plot(x + d, y + d2, channels, inverse)
                 except IndexError as e:
-                    # print(e)
-                    #because of cursor index
                     continue
         return reward, good_points_counter, bad_points_counter
 
@@ -343,9 +341,11 @@ class Env(gym.Env):
         self.recent_actions = []
         self.recent_rotate_number = 0
         self.pen = True
+        self.wrong_forward = False
+
         self.pen_repeat = False
         self.remaining_steps = self.maximum_steps
-        x = random.sample(range(10,self.screen_width-20), 1)[0]
+        x = random.sample(range(10,self.screen_width-30), 1)[0]
         y = random.sample(range(15, self.screen_height-45), 1)[0]
         origin = [x, y]
         size = np.random.choice(range(3,5), 3)*5
@@ -391,6 +391,7 @@ class Env(gym.Env):
         self.tx += cx
         self.ty += cy
         self._draw_turtle(False)
+        self.wrong_forward = bp>0
         self.graphics.draw_p += gp
         self.graphics.draw_wrong_p += bp
         return reward
@@ -452,35 +453,40 @@ class Env(gym.Env):
 # make lines thicker
 
     def calc_prepend_points(self, p):
-        width = config['width']
+        width = config['prospect_width']
         p1y = math.sin(self.angle + math.pi / 2) * width + p[1]
         p1x = math.cos(self.angle + math.pi / 2) * width + p[0]
         p2y = math.sin(self.angle - math.pi / 2) * width + p[1]
-        p2x = math.sin(self.angle - math.pi / 2) * width + p[0]
+        p2x = math.cos(self.angle - math.pi / 2) * width + p[0]
         return ((int(p1x), int(p1y)), (int(p2x), int(p2y)))
 
     def calc_prospective_reward(self):
         fps = self.calc_prepend_points((self.tx, self.ty))
         prospect = config['prospect_length']
-        npoint = (math.cos(self.angle)*prospect+self.tx, math.sin(self.angle)*prospect+self.ty)
-        sps = self.calc_prepend_points(npoint)
-
+        npoint = []
+        for pr in prospect:
+            npoint.append((math.cos(self.angle)*pr+self.tx, math.sin(self.angle)*pr+self.ty))
+        sps = []
+        for nps in npoint:
+            sps.append(self.calc_prepend_points(nps))
         #TODO does not work properly for fractional degrees
-        xs = [fps[0][0], fps[1][0], sps[0][0], sps[1][0]]
-        ys = [fps[0][1], fps[1][1], sps[0][1], sps[1][1]]
-        minx = min(xs)
-        maxx = max(xs)
-        miny = min(ys)
-        maxy = max(ys)
-        print(xs, ys)
-        rectangle_view = np.array(self.graphics.pixels[minx:maxx, miny:maxy,:])
-        target_points = np.logical_and(rectangle_view[:,:,2]==FULL, rectangle_view[:,:,0]==EMPTY)
-        print(target_points)
-        total_points = np.prod(rectangle_view.shape)
-        return (np.count_nonzero(target_points)/total_points)*config['prospect_reward']
+        prospect_reward = []
+        for index, point in enumerate(sps):
+            xs = [fps[0][0], fps[1][0], point[0][0], point[1][0]]
+            ys = [fps[0][1], fps[1][1], point[0][1], point[1][1]]
+            minx = max(min(xs), 0)
+            maxx = min(max(xs), self.screen_width)
+            miny = max(min(ys), 0)
+            maxy = min(max(ys), self.screen_height)
+            rectangle_view = np.array(self.graphics.pixels[minx:maxx, miny:maxy,:])
+            target_points = np.logical_and(rectangle_view[:,:,config['target_channel']]==FULL, rectangle_view[:,:,config['draw_channel']]==EMPTY)
+            total_points = 2*config['prospect_width']*prospect[index]
+            prospect_reward.append(np.count_nonzero(target_points)/total_points)
+        return sum(prospect_reward*np.array(config['prospect_reward']))
 
 
     def step(self, action):
+        self.wrong_forward = False
         self.graphics.draw_number(self.coordinate, self.rotate_step, [SSL]*3, clear = True)
         self.graphics.draw_number(self.coordinate2, self.recent_rotate_number, [SSL]*3, clear = True)
         self.recent_actions.append(action)
@@ -497,20 +503,18 @@ class Env(gym.Env):
             self.rotate_step=0
         elif action == 1:
             self.rotate_step += 1
-            threshold = config['recent_actions_history']/2
+            threshold = int(config['recent_actions_history']/1.8)
             self._rotate(config['rotate_degree'] * DEGREE)
             consecutive_rotate_threshold = (360/config['rotate_degree'])-1
             if self.rotate_step > consecutive_rotate_threshold:
-                reward -= (self.rotate_step - consecutive_rotate_threshold) * 500
+                reward -= (self.rotate_step - consecutive_rotate_threshold) * 5000
             if self.recent_rotate_number > threshold:
-                reward -= (self.recent_rotate_number- threshold)*500
-            # if self.rotate_step > (180/config['rotate_degree']-1):
-            #     print("shod")
-            #     self.graphics.lsp = [
+                reward -= (self.recent_rotate_number- threshold)*5000
 
         elif action == 2:
             pass
-        print("prospect reward", self.calc_prospective_reward())
+        if action == 1 or (action == 0 and reward<0 and self.wrong_forward == False):
+            reward += self.calc_prospective_reward()
         self.graphics.draw_number(self.coordinate, self.rotate_step, [SSL]*3)
         self.graphics.draw_number(self.coordinate2, self.recent_rotate_number, [SSL]*3)
 
@@ -521,6 +525,13 @@ class Env(gym.Env):
         # elif action == 3:
         #     for _ in range(5):
         #         reward += self._forward(3)
+
+
+
+
+
+
+
         #         self._rotate(2 * DEGREE)
         # else:
             # if(self.pen_repeat==True and self.pen==True):
@@ -529,7 +540,7 @@ class Env(gym.Env):
                 # self.pen_repeat = True
             # self.pen = not self.pen
         self._done, tr = self._is_done()
-        reward+=tr
+        reward += tr
 
         return np.uint8(self.graphics.pixels), reward, self._done, {'coverage': coverage}
 

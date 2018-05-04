@@ -10,7 +10,10 @@ def main():
         episode_rew = 0
         while not done:
             env.render()
-            action = int(input())
+            try:
+                action = int(input())
+            except ValueError:
+                continue
             obs, rew, done, dict = env.step(action)
             episode_rew += rew
             time.sleep(0.1)
