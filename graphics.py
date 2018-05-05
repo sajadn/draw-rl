@@ -22,8 +22,8 @@ config = {
     "target_channel": 2,
     "helper_channel": 3,
     "draw_reward": 20,
-    "prospect_reward": [1300, 1100, 500],
-    "draw_punish": 55,
+    "prospect_reward": [400, 150, 100],
+    "draw_punish": 40,
     "time_punish": 5,
     "use_gpu_array": False,
     "target_line_width": 6,
@@ -123,7 +123,7 @@ class Graphics:
                     if self.pixels[x,y, config['helper_channel']]==FULL:
                         return -1*config['draw_punish']
                     else:
-                        return -0.015*config['draw_punish']
+                        return -0.005*config['draw_punish']
             else:
                 return -1*config['draw_punish']
         except IndexError:
@@ -489,7 +489,8 @@ class Env(gym.Env):
         self.wrong_forward = False
         self.graphics.draw_number(self.coordinate, self.rotate_step, [SSL]*3, clear = True)
         self.graphics.draw_number(self.coordinate2, self.recent_rotate_number, [SSL]*3, clear = True)
-        self.recent_actions.append(action)
+        if action!=2:
+            self.recent_actions.append(action)
         if(len(self.recent_actions)>config['recent_actions_history']):
             del self.recent_actions[0]
 
@@ -507,9 +508,9 @@ class Env(gym.Env):
             self._rotate(config['rotate_degree'] * DEGREE)
             consecutive_rotate_threshold = (360/config['rotate_degree'])-1
             if self.rotate_step > consecutive_rotate_threshold:
-                reward -= (self.rotate_step - consecutive_rotate_threshold) * 5000
+                reward -= (self.rotate_step - consecutive_rotate_threshold) * 2000
             if self.recent_rotate_number > threshold:
-                reward -= (self.recent_rotate_number- threshold)*5000
+                reward -= (self.recent_rotate_number- threshold)*2000
 
         elif action == 2:
             pass
