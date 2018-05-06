@@ -22,8 +22,8 @@ config = {
     "target_channel": 2,
     "helper_channel": 3,
     "draw_reward": 20,
-    "prospect_reward": [400, 150, 100],
-    "draw_punish": 40,
+    "prospect_reward": [1220, 410, 100],
+    "draw_punish": 50,
     "time_punish": 5,
     "use_gpu_array": False,
     "target_line_width": 6,
@@ -32,7 +32,7 @@ config = {
     "recent_actions_history": 30,
     "rotate_degree": 90,
     "polygon_size": 4,
-    "prospect_width": 7,
+    "prospect_width": 6,
     "prospect_length":[10, 20, 35],
 }
 
@@ -299,7 +299,7 @@ class Env(gym.Env):
         self.height = height
         self.state = None
         self.maximum_steps = config['maximum_steps']
-        self.action_space = spaces.Discrete(3)
+        self.action_space = spaces.Discrete(2)
         self.observation_space = spaces.Box(low=0, high=255, shape=(height, width, 3))
         self.display = None
         self.coordinate = [int(self.width*5/16), int(self.width/18)]
@@ -461,7 +461,7 @@ class Env(gym.Env):
         return ((int(p1x), int(p1y)), (int(p2x), int(p2y)))
 
     def calc_prospective_reward(self):
-        fps = self.calc_prepend_points((self.tx, self.ty))
+        fps = self.calc_prepend_points((self.tx+math.cos(self.angle)*config['target_line_width']/2, self.ty + math.sin(self.angle)*config['target_line_width']/2))
         prospect = config['prospect_length']
         npoint = []
         for pr in prospect:
@@ -489,8 +489,9 @@ class Env(gym.Env):
         self.wrong_forward = False
         self.graphics.draw_number(self.coordinate, self.rotate_step, [SSL]*3, clear = True)
         self.graphics.draw_number(self.coordinate2, self.recent_rotate_number, [SSL]*3, clear = True)
-        if action!=2:
-            self.recent_actions.append(action)
+        #TODO if null action is active it is required
+        # if action!=2:
+        #     self.recent_actions.append(action)
         if(len(self.recent_actions)>config['recent_actions_history']):
             del self.recent_actions[0]
 
@@ -511,9 +512,8 @@ class Env(gym.Env):
                 reward -= (self.rotate_step - consecutive_rotate_threshold) * 2000
             if self.recent_rotate_number > threshold:
                 reward -= (self.recent_rotate_number- threshold)*2000
-
-        elif action == 2:
-            pass
+        else:
+            raise Exception()
         if action == 1 or (action == 0 and reward<0 and self.wrong_forward == False):
             reward += self.calc_prospective_reward()
         self.graphics.draw_number(self.coordinate, self.rotate_step, [SSL]*3)

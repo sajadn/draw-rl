@@ -25,7 +25,7 @@ def main():
     env = ScaledFloatFrame(env)
 
     model = deepq.models.cnn_to_mlp(
-        convs=[(16, 8, 4), (16, 4, 2), (32, 3, 1)],
+        convs=[(32, 8, 4), (32, 4, 2), (64, 3, 1)],
         hiddens=[256],
         dueling=bool(args.dueling),
     )
@@ -34,7 +34,7 @@ def main():
         q_func=model,
         lr=1e-4,
         max_timesteps=args.num_timesteps,
-        buffer_size=10000,
+        buffer_size=100000,
         exploration_fraction=0.1,
         exploration_final_eps=0.01,
         train_freq=4,
