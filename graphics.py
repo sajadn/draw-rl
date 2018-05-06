@@ -23,7 +23,7 @@ config = {
     "helper_channel": 3,
     "draw_reward": 20,
     "prospect_reward": [1220, 410, 100],
-    "draw_punish": 50,
+    "draw_punish": 60,
     "time_punish": 5,
     "use_gpu_array": False,
     "target_line_width": 6,
@@ -491,7 +491,7 @@ class Env(gym.Env):
         self.graphics.draw_number(self.coordinate2, self.recent_rotate_number, [SSL]*3, clear = True)
         #TODO if null action is active it is required
         # if action!=2:
-        #     self.recent_actions.append(action)
+        self.recent_actions.append(action)
         if(len(self.recent_actions)>config['recent_actions_history']):
             del self.recent_actions[0]
 
@@ -509,9 +509,9 @@ class Env(gym.Env):
             self._rotate(config['rotate_degree'] * DEGREE)
             consecutive_rotate_threshold = (360/config['rotate_degree'])-1
             if self.rotate_step > consecutive_rotate_threshold:
-                reward -= (self.rotate_step - consecutive_rotate_threshold) * 2000
+                reward -= (self.rotate_step - consecutive_rotate_threshold) * 3000
             if self.recent_rotate_number > threshold:
-                reward -= (self.recent_rotate_number- threshold)*2000
+                reward -= (self.recent_rotate_number- threshold)*3000
         else:
             raise Exception()
         if action == 1 or (action == 0 and reward<0 and self.wrong_forward == False):
