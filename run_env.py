@@ -17,8 +17,8 @@ def main():
             obs, rew, done, dict = env.step(action)
             episode_rew += rew
             time.sleep(0.1)
-            # print(action, rew)
-            print("Reward", rew)
+            print(action, rew)
+            print("Reward", episode_rew)
             print("coverage", dict['coverage'])
 
 if __name__ == '__main__':

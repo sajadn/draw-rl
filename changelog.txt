@@ -25,4 +25,9 @@ design shapes to have proper degree --> good result
 25 April
 change the reward function in a way that repeated lines does not seem that much dangerous because the goal is to draw numbers
 
- 
+1 May add prospective to reward function
+
+11 May readd null action
+limit prospect to only 10 pixels forward
+give reward of actions after moving on a repeated line for all the repeated line
+make the positive reward exponential 

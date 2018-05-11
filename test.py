@@ -4,7 +4,7 @@ import argparse
 from baselines import logger
 import numpy as np
 from baselines.common.atari_wrappers import WarpFrame, ScaledFloatFrame, FrameStack
-
+from time import sleep
 def main():
     env = Env(64, 64)
     env = WarpFrame(env)
@@ -18,8 +18,8 @@ def main():
     args = parser.parse_args()
     logger.configure()
     model = deepq.models.cnn_to_mlp(
-        convs=[(8, 8, 4), (8, 4, 2), (16, 3, 1)],
-        hiddens=[128],
+        convs=[(32, 8, 4), (32, 4, 2), (64, 3, 1)],
+        hiddens=[256],
         dueling=bool(args.dueling),
     )
     act = deepq.learn(
@@ -41,6 +41,7 @@ def main():
         obs, done = env.reset(), False
         episode_rew = 0
         while not done:
+            sleep(0.01)
             env.render()
             action = act(np.array(obs)[None])[0]
             obs, rew, done, _ = env.step(action)

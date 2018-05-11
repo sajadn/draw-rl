@@ -22,9 +22,9 @@ config = {
     "target_channel": 2,
     "helper_channel": 3,
     "draw_reward": 20,
-    "prospect_reward": [1220, 410, 100],
-    "draw_punish": 60,
-    "time_punish": 5,
+    "prospect_reward": [1400],
+    "draw_punish": 120,
+    "time_punish": 10,
     "use_gpu_array": False,
     "target_line_width": 6,
     "turtle_line_width": 3,
@@ -32,8 +32,8 @@ config = {
     "recent_actions_history": 30,
     "rotate_degree": 90,
     "polygon_size": 4,
-    "prospect_width": 6,
-    "prospect_length":[10, 20, 35],
+    "prospect_width": 5,
+    "prospect_length":[10],
 }
 
 if config["use_gpu_array"]:
@@ -66,26 +66,27 @@ class Graphics:
     def plot(self, x, y, channels=[0], inverse=False):
         if x < 0 or y < 0:
             return
-        flag = False
+        repeated = False
         data = EMPTY if inverse else FULL
         if channels == [config['draw_channel']]:
             if self.pixels[x, y, config['target_channel']] == FULL and self.pixels[x, y, config['draw_channel']] == FULL:
                 self.pixels[x, y, config['helper_channel']]=FULL
+                repeated = True
             self.tlsp.append((x, y))
 
         for ch in channels:
             self.pixels[x, y, ch] = data
-
+        return repeated
 
 
     def draw_polygon(self, points):
         start = points[0]
         self.target_p = 0
         for p in points[1:]:
-            _, temp, _ = self.line(*start, *p, config['target_channel'], line_width=config['target_line_width'])
+            _, temp, _, _ = self.line(*start, *p, config['target_channel'], line_width=config['target_line_width'])
             self.target_p += temp
             start = p
-        _, temp, _ = self.line(*p, *points[0], config['target_channel'], line_width=config['target_line_width'])
+        _, temp, _, _ = self.line(*p, *points[0], config['target_channel'], line_width=config['target_line_width'])
         self.target_p += temp
 
     def draw_arc(self, center, radius, degree, channels, fill):
@@ -103,13 +104,13 @@ class Graphics:
 
     def rect(self, x0, y0, width, height, channels=config['target_channel']):
         p= 0
-        _, temp, _ = self.line(x0, y0, x0 + width, y0, channels, line_width=config['target_line_width'])
+        _, temp, _, _ = self.line(x0, y0, x0 + width, y0, channels, line_width=config['target_line_width'])
         p+= temp
-        _, temp, _ = self.line(x0, y0, x0, y0 + height, channels, line_width=config['target_line_width'])
+        _, temp, _, _ = self.line(x0, y0, x0, y0 + height, channels, line_width=config['target_line_width'])
         p+= temp
-        _, temp, _ = self.line(x0 + width, y0, x0 + width, y0 + height, channels, line_width=config['target_line_width'])
+        _, temp, _, _ = self.line(x0 + width, y0, x0 + width, y0 + height, channels, line_width=config['target_line_width'])
         p+= temp
-        _, temp, _ = self.line(x0, y0 + height, x0 + width, y0 + height, channels, line_width=config['target_line_width'])
+        _, temp, _, _ = self.line(x0, y0 + height, x0 + width, y0 + height, channels, line_width=config['target_line_width'])
         p+= temp
         self.target_p = p
 
@@ -123,7 +124,7 @@ class Graphics:
                     if self.pixels[x,y, config['helper_channel']]==FULL:
                         return -1*config['draw_punish']
                     else:
-                        return -0.005*config['draw_punish']
+                        return -0.001*config['draw_punish']
             else:
                 return -1*config['draw_punish']
         except IndexError:
@@ -137,7 +138,7 @@ class Graphics:
         reward, tr = 0, 0
         good_points_counter, bad_points_counter, tpc = 0, 0, 0
         line_width = int(line_width/2)
-
+        repeated = True
         for d in range(-line_width, line_width):
             for d2 in range(-line_width, line_width):
                 try:
@@ -155,10 +156,11 @@ class Graphics:
                             bad_points_counter += 1
                     elif self.pixels[x+d, y+d2, config['target_channel']] == EMPTY:
                         good_points_counter += 1
-                    self.plot(x + d, y + d2, channels, inverse)
+                    plot_out = self.plot(x + d, y + d2, channels, inverse)
+                    repeated = repeated and plot_out
                 except IndexError as e:
                     continue
-        return reward, good_points_counter, bad_points_counter
+        return reward, good_points_counter, bad_points_counter, repeated
 
     def draw_number(self, origin, num, SSL, chan=[config['helper_channel'], config['draw_channel']], clear = False):
         digits = []
@@ -214,19 +216,19 @@ class Graphics:
             if(chan!=config['target_channel']):
                 line_width = int(config['target_line_width']/3)
             if(a==0):
-                _, temp, _ = self.line(origin[0], origin[1], origin[0]+SSL[0], origin[1], chan, clear, line_width)
+                _, temp, _, _ = self.line(origin[0], origin[1], origin[0]+SSL[0], origin[1], chan, clear, line_width)
             elif(a==1):
-                _, temp, _ = self.line(origin[0], origin[1], origin[0], origin[1]+SSL[1], chan, clear, line_width)
+                _, temp, _, _ = self.line(origin[0], origin[1], origin[0], origin[1]+SSL[1], chan, clear, line_width)
             elif(a==2):
-                _, temp, _ = self.line(origin[0]+SSL[0], origin[1], origin[0]+SSL[0], origin[1]+SSL[1], chan, clear, line_width)
+                _, temp, _, _ = self.line(origin[0]+SSL[0], origin[1], origin[0]+SSL[0], origin[1]+SSL[1], chan, clear, line_width)
             elif(a==3):
-                _, temp, _ = self.line(origin[0], origin[1]+SSL[1], origin[0]+SSL[0], origin[1]+SSL[1], chan, clear, line_width)
+                _, temp, _, _ = self.line(origin[0], origin[1]+SSL[1], origin[0]+SSL[0], origin[1]+SSL[1], chan, clear, line_width)
             elif(a==4):
-                _, temp, _ = self.line(origin[0], origin[1]+SSL[1], origin[0], origin[1]+SSL[1]+SSL[2], chan, clear, line_width)
+                _, temp, _, _ = self.line(origin[0], origin[1]+SSL[1], origin[0], origin[1]+SSL[1]+SSL[2], chan, clear, line_width)
             elif(a==5):
-                _, temp, _ = self.line(origin[0]+SSL[0], origin[1]+SSL[1], origin[0]+SSL[0], origin[1]+SSL[1]+SSL[2], chan, clear, line_width)
+                _, temp, _, _ = self.line(origin[0]+SSL[0], origin[1]+SSL[1], origin[0]+SSL[0], origin[1]+SSL[1]+SSL[2], chan, clear, line_width)
             elif(a==6):
-                _, temp, _ = self.line(origin[0], origin[1]+SSL[1]+SSL[2], origin[0]+SSL[0], origin[1]+SSL[1]+SSL[2], chan, clear, line_width)
+                _, temp, _, _ = self.line(origin[0], origin[1]+SSL[1]+SSL[2], origin[0]+SSL[0], origin[1]+SSL[1]+SSL[2], chan, clear, line_width)
             del array[0]
             if chan == config['target_channel']:
                 self.target_p += temp
@@ -249,7 +251,7 @@ class Graphics:
         sgn = 1 if deltay >= 0 else -1
         if type(channels) != list:
             channels = [channels]
-
+        repeated = True
         reward = 0
         gpc, bpc = 0, 0
         if deltax != 0:
@@ -261,30 +263,33 @@ class Graphics:
                 y = y1
                 sgn *= -1
             for x in range(x0, x1):
-                tr, tgpc, tbpc = self._plot(x, y, channels, inverse, line_width, calc_reward)
+                tr, tgpc, tbpc, rep = self._plot(x, y, channels, inverse, line_width, calc_reward)
                 reward += tr
                 gpc += tgpc
                 bpc += tbpc
                 error += deltaerr
+                repeated = rep and repeated
                 while error >= 0.5:
                     y += sgn
-                    tr, tgpc, tbpc  = self._plot(x, y, channels, inverse, line_width, calc_reward)
+                    tr, tgpc, tbpc, rep  = self._plot(x, y, channels, inverse, line_width, calc_reward)
                     reward += tr
                     gpc += tgpc
                     bpc += tbpc
                     error -= 1.
+                    repeated = rep and repeated
         else:
             if y1 < y0:
                 y1, y0 = y0, y1
             for y in range(y0, y1):
-                tr, tgpc, tbpc  = self._plot(x0, y, channels, inverse, line_width, calc_reward)
+                tr, tgpc, tbpc, rep = self._plot(x0, y, channels, inverse, line_width, calc_reward)
                 reward += tr
                 gpc += tgpc
                 bpc += tbpc
+                repeated = rep and repeated
         if (channels == [config["draw_channel"]]):
             self.last_line = [(x0, y0), (x1, y1)]
 
-        return reward, gpc, bpc
+        return reward, gpc, bpc, repeated
 
 
 class Env(gym.Env):
@@ -299,7 +304,7 @@ class Env(gym.Env):
         self.height = height
         self.state = None
         self.maximum_steps = config['maximum_steps']
-        self.action_space = spaces.Discrete(2)
+        self.action_space = spaces.Discrete(3)
         self.observation_space = spaces.Box(low=0, high=255, shape=(height, width, 3))
         self.display = None
         self.coordinate = [int(self.width*5/16), int(self.width/18)]
@@ -335,6 +340,9 @@ class Env(gym.Env):
 
 
     def reset(self):
+        self.repeated_forwards = 0
+
+        self.basic_coverage = 0
         self.graphics.reset()
         self.angle = math.pi/2.
         self.rotate_step = 0
@@ -342,14 +350,15 @@ class Env(gym.Env):
         self.recent_rotate_number = 0
         self.pen = True
         self.wrong_forward = False
-
+        self.wrong_forward_numbers = 0
         self.pen_repeat = False
+        self.first_forward = True
         self.remaining_steps = self.maximum_steps
         x = random.sample(range(10,self.screen_width-30), 1)[0]
         y = random.sample(range(15, self.screen_height-45), 1)[0]
         origin = [x, y]
         size = np.random.choice(range(3,5), 3)*5
-        target_num = random.sample(range(2,6), 1)
+        target_num = random.sample(range(2, 6), 1)
         self.graphics.draw_number(origin, target_num[0], size, chan=config['target_channel'])
         self.graphics.draw_number(self.coordinate, self.rotate_step, [SSL] * 3)
         self.graphics.draw_number(self.coordinate2, self.recent_rotate_number, [SSL] * 3)
@@ -384,7 +393,7 @@ class Env(gym.Env):
             cx = int(distance * math.cos(self.angle))
             cy = int(distance * math.sin(self.angle))
         if self.pen:
-            reward, gp, bp = self.graphics.line(self.tx, self.ty, self.tx + cx, self.ty + cy,
+            reward, gp, bp, repeated = self.graphics.line(self.tx, self.ty, self.tx + cx, self.ty + cy,
                                         channels=[config['draw_channel']], line_width=config['target_line_width'],
                                         calc_reward=True)
 
@@ -394,7 +403,7 @@ class Env(gym.Env):
         self.wrong_forward = bp>0
         self.graphics.draw_p += gp
         self.graphics.draw_wrong_p += bp
-        return reward
+        return reward, repeated
 
     def _rotate(self, angle, draw=True):
         if draw:
@@ -481,6 +490,8 @@ class Env(gym.Env):
             rectangle_view = np.array(self.graphics.pixels[minx:maxx, miny:maxy,:])
             target_points = np.logical_and(rectangle_view[:,:,config['target_channel']]==FULL, rectangle_view[:,:,config['draw_channel']]==EMPTY)
             total_points = 2*config['prospect_width']*prospect[index]
+            # print("target_points", np.count_nonzero(target_points))
+            # print("total_points", total_points)
             prospect_reward.append(np.count_nonzero(target_points)/total_points)
         return sum(prospect_reward*np.array(config['prospect_reward']))
 
@@ -490,19 +501,43 @@ class Env(gym.Env):
         self.graphics.draw_number(self.coordinate, self.rotate_step, [SSL]*3, clear = True)
         self.graphics.draw_number(self.coordinate2, self.recent_rotate_number, [SSL]*3, clear = True)
         #TODO if null action is active it is required
-        # if action!=2:
-        self.recent_actions.append(action)
+        if action!=2:
+                self.recent_actions.append(action)
         if(len(self.recent_actions)>config['recent_actions_history']):
             del self.recent_actions[0]
+
 
         self.recent_rotate_number = reduce(lambda x,y: x+1 if y==1 else x, [0, *self.recent_actions])
         if self._done == True:
             return np.uint8(self.graphics.pixels), 0 , True, {}
+        coverage = float(self.graphics.draw_p)/float(self.graphics.target_p)
         self.remaining_steps -= 1
         reward = -config['time_punish']
         if action == 0:
-            reward += self._forward(5)
+            temp_reward, repeated = self._forward(5)
+            if self.first_forward == True:
+                if(temp_reward>500):
+                    temp_reward = 500+config['time_punish']
+                self.first_forward = False
+            if self.wrong_forward == True:
+                self.wrong_forward_numbers +=1
+                self.basic_coverage = coverage
+                temp_reward = temp_reward * self.wrong_forward_numbers
+            elif self.wrong_forward == False:
+                self.wrong_forward_numbers = 0
+
+            if repeated == True and temp_reward>-100:
+                self.repeated_forwards += 1
+
+                reward -= (max(self.repeated_forwards,5)-5)*4000
+            else:
+                if self.repeated_forwards>0:
+                    reward += (min(self.repeated_forwards, 5)+1)*temp_reward*2.5
+                    self.repeated_forwards = 0
+                else:
+                    reward+= (1 + coverage - self.basic_coverage)**3*temp_reward
             self.rotate_step=0
+
         elif action == 1:
             self.rotate_step += 1
             threshold = int(config['recent_actions_history']/1.8)
@@ -512,14 +547,15 @@ class Env(gym.Env):
                 reward -= (self.rotate_step - consecutive_rotate_threshold) * 3000
             if self.recent_rotate_number > threshold:
                 reward -= (self.recent_rotate_number- threshold)*3000
+        elif action ==2:
+            pass
         else:
             raise Exception()
-        if action == 1 or (action == 0 and reward<0 and self.wrong_forward == False):
+        if action == 1 :
             reward += self.calc_prospective_reward()
         self.graphics.draw_number(self.coordinate, self.rotate_step, [SSL]*3)
         self.graphics.draw_number(self.coordinate2, self.recent_rotate_number, [SSL]*3)
 
-        coverage = float(self.graphics.draw_p)/float(self.graphics.target_p)
 
         # elif action == 2:
         #     self._rotate(-10 * DEGREE)
@@ -571,8 +607,8 @@ def main():
             #    env.render_on_file(str(j)+"_"+str(r))
         end = current_milli_time()
         total += rt
-        print(i, end-start, rt)
-    print(total/10.0)
+        # print(i, end-start, rt)
+    # print(total/10.0)
 
 
 if __name__ == '__main__':
