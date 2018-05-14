@@ -31,3 +31,8 @@ change the reward function in a way that repeated lines does not seem that much 
 limit prospect to only 10 pixels forward
 give reward of actions after moving on a repeated line for all the repeated line
 make the positive reward exponential 
+
+13 May
+make prospect reward exponential
+create reward for moving toward blue points when there is red line to them
+
