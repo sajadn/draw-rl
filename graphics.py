@@ -16,19 +16,19 @@ FULL = 255.0
 SSL = 4 ## seven segment line
 config = {
     "channel_numbers": 4,
-    "maximum_steps": 75,
+    "maximum_steps": 35,
     "draw_channel": 0,
     "turtle_channel": 1,
     "target_channel": 2,
     "helper_channel": 3,
-    "draw_reward": 20,
-    "prospect_reward": [1400],
-    "draw_punish": 120,
-    "time_punish": 10,
+    "draw_reward": 1,
+    "prospect_reward": [74],
+    "draw_punish": 10,
+    "time_punish": 1,
     "use_gpu_array": False,
     "target_line_width": 6,
     "turtle_line_width": 3,
-    "end_state_reward": 4000,
+    "end_state_reward": 3000,
     "recent_actions_history": 30,
     "rotate_degree": 90,
     "polygon_size": 4,
@@ -74,8 +74,7 @@ class Graphics:
                 repeated = True
             self.tlsp.append((x, y))
 
-        for ch in channels:
-            self.pixels[x, y, ch] = data
+        self.pixels[x, y, channels] = data
         return repeated
 
 
@@ -139,16 +138,16 @@ class Graphics:
         good_points_counter, bad_points_counter, tpc = 0, 0, 0
         line_width = int(line_width/2)
         repeated = True
-        for d in range(-line_width, line_width):
-            for d2 in range(-line_width, line_width):
+        base = 0 if (config["helper_channel"] in channels and calc_reward==False) else -line_width
+        for d in range(base, line_width):
+            for d2 in range(base, line_width):
                 try:
-                    if channels==[config["draw_channel"]]:
-                        if self.is_in_points(x+d, y+d2, [self.tlsp]):
-                            continue
-                        if self.nlsp and self.is_in_points(x+d, y+d2, self.lsp):
-                            continue
-                    temp = self.calc_point_reward(x+d, y+d2)
                     if calc_reward:
+                        if self.is_in_points(x + d, y + d2, [self.tlsp]):
+                            continue
+                        if self.nlsp and self.is_in_points(x + d, y + d2, self.lsp):
+                            continue
+                        temp = self.calc_point_reward(x + d, y + d2)
                         reward += temp
                         if temp>0:
                             good_points_counter += 1
@@ -304,7 +303,7 @@ class Env(gym.Env):
         self.height = height
         self.state = None
         self.maximum_steps = config['maximum_steps']
-        self.action_space = spaces.Discrete(3)
+        self.action_space = spaces.Discrete(2)
         self.observation_space = spaces.Box(low=0, high=255, shape=(height, width, 3))
         self.display = None
         self.coordinate = [int(self.width*5/16), int(self.width/18)]
@@ -344,7 +343,7 @@ class Env(gym.Env):
 
         self.basic_coverage = 0
         self.graphics.reset()
-        self.angle = math.pi/2.
+        self.angle = 0
         self.rotate_step = 0
         self.recent_actions = []
         self.recent_rotate_number = 0
@@ -446,11 +445,11 @@ class Env(gym.Env):
     def _is_done(self):
         coverage = float(self.graphics.draw_p)/float(self.graphics.target_p)
         if coverage > 0.99:
-            print("coverage", coverage)
+            # print("coverage", coverage)
             end_reward_coeff = (self.graphics.draw_p) / (self.graphics.draw_wrong_p*1.5 + self.graphics.draw_p)
             return True, config['end_state_reward'] * end_reward_coeff
         if self.remaining_steps == 0:
-            print("coverage", coverage)
+            # print("coverage", coverage)
             return True, 0
         return False, 0
 
@@ -493,13 +492,15 @@ class Env(gym.Env):
             # print("target_points", np.count_nonzero(target_points))
             # print("total_points", total_points)
             prospect_reward.append(np.count_nonzero(target_points)/total_points)
-        return sum(prospect_reward*np.array(config['prospect_reward']))
+        rewards = prospect_reward * np.array(config['prospect_reward'])
+        rewards *= (1 + self.coverage - self.basic_coverage)**3
+        return sum(rewards)
 
 
     def step(self, action):
         self.wrong_forward = False
-        self.graphics.draw_number(self.coordinate, self.rotate_step, [SSL]*3, clear = True)
-        self.graphics.draw_number(self.coordinate2, self.recent_rotate_number, [SSL]*3, clear = True)
+        rotate_step = self.rotate_step
+        recent_rotate = self.recent_rotate_number
         #TODO if null action is active it is required
         if action!=2:
                 self.recent_actions.append(action)
@@ -508,34 +509,26 @@ class Env(gym.Env):
 
 
         self.recent_rotate_number = reduce(lambda x,y: x+1 if y==1 else x, [0, *self.recent_actions])
+        self.coverage = float(self.graphics.draw_p) / float(self.graphics.target_p)
         if self._done == True:
             return np.uint8(self.graphics.pixels), 0 , True, {}
-        coverage = float(self.graphics.draw_p)/float(self.graphics.target_p)
+
         self.remaining_steps -= 1
         reward = -config['time_punish']
         if action == 0:
             temp_reward, repeated = self._forward(5)
             if self.first_forward == True:
-                if(temp_reward>500):
-                    temp_reward = 500+config['time_punish']
+                if(temp_reward>35):
+                    temp_reward = 41+config['time_punish']
                 self.first_forward = False
             if self.wrong_forward == True:
                 self.wrong_forward_numbers +=1
-                self.basic_coverage = coverage
+                self.basic_coverage = self.coverage
                 temp_reward = temp_reward * self.wrong_forward_numbers
             elif self.wrong_forward == False:
                 self.wrong_forward_numbers = 0
 
-            if repeated == True and temp_reward>-100:
-                self.repeated_forwards += 1
-
-                reward -= (max(self.repeated_forwards,5)-5)*4000
-            else:
-                if self.repeated_forwards>0:
-                    reward += (min(self.repeated_forwards, 5)+1)*temp_reward*2.5
-                    self.repeated_forwards = 0
-                else:
-                    reward+= (1 + coverage - self.basic_coverage)**3*temp_reward
+            reward += temp_reward * (1 + self.coverage - self.basic_coverage) ** 3
             self.rotate_step=0
 
         elif action == 1:
@@ -544,17 +537,20 @@ class Env(gym.Env):
             self._rotate(config['rotate_degree'] * DEGREE)
             consecutive_rotate_threshold = (360/config['rotate_degree'])-1
             if self.rotate_step > consecutive_rotate_threshold:
-                reward -= (self.rotate_step - consecutive_rotate_threshold) * 3000
+                reward -= (self.rotate_step - consecutive_rotate_threshold) * 1000
             if self.recent_rotate_number > threshold:
-                reward -= (self.recent_rotate_number- threshold)*3000
-        elif action ==2:
-            pass
+                reward -= (self.recent_rotate_number- threshold)*1000
         else:
-            raise Exception()
+            pass
         if action == 1 :
             reward += self.calc_prospective_reward()
-        self.graphics.draw_number(self.coordinate, self.rotate_step, [SSL]*3)
-        self.graphics.draw_number(self.coordinate2, self.recent_rotate_number, [SSL]*3)
+        if self.rotate_step != rotate_step:
+            self.graphics.draw_number(self.coordinate, rotate_step, [SSL] * 3, clear=True)
+            self.graphics.draw_number(self.coordinate, self.rotate_step, [SSL] * 3)
+        if self.recent_rotate_number != recent_rotate:
+            self.graphics.draw_number(self.coordinate2, recent_rotate, [SSL] * 3, clear=True)
+            self.graphics.draw_number(self.coordinate2, self.recent_rotate_number, [SSL] * 3)
+
 
 
         # elif action == 2:
@@ -579,7 +575,7 @@ class Env(gym.Env):
         self._done, tr = self._is_done()
         reward += tr
 
-        return np.uint8(self.graphics.pixels), reward, self._done, {'coverage': coverage}
+        return np.uint8(self.graphics.pixels), reward, self._done, {'coverage': self.coverage}
 
 import time
 
