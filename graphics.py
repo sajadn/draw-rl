@@ -306,8 +306,9 @@ class Env(gym.Env):
         self.action_space = spaces.Discrete(2)
         self.observation_space = spaces.Box(low=0, high=255, shape=(height, width, 3))
         self.display = None
-        self.coordinate = [int(self.width*5/16), int(self.width/18)]
-        self.coordinate2 = [int(self.width*1/16), int(self.width/18)]
+        self.coordinate = [int(self.width*1/16), int(self.width/18)]
+        self.coordinate2 = [int(self.width*5/16), int(self.width/18)]
+        self.coordinate3 = [int(self.width*9/16), int(self.width / 18)]
 
     def _select_polygon_points(self, num):
         x = self.np_random.randint(self.screen_width/2-6, self.screen_width/2+20, 1)
@@ -340,11 +341,12 @@ class Env(gym.Env):
 
     def reset(self):
         self.repeated_forwards = 0
-
+        self.circular = 0
         self.basic_coverage = 0
         self.graphics.reset()
         self.angle = 0
-        self.rotate_step = 0
+        self.rotate_right = 0
+        self.rotate_left = 0
         self.recent_actions = []
         self.recent_rotate_number = 0
         self.pen = True
@@ -359,8 +361,9 @@ class Env(gym.Env):
         size = np.random.choice(range(3,5), 3)*5
         target_num = random.sample(range(2, 6), 1)
         self.graphics.draw_number(origin, target_num[0], size, chan=config['target_channel'])
-        self.graphics.draw_number(self.coordinate, self.rotate_step, [SSL] * 3)
-        self.graphics.draw_number(self.coordinate2, self.recent_rotate_number, [SSL] * 3)
+        self.graphics.draw_number(self.coordinate, self.rotate_right, [SSL] * 3)
+        self.graphics.draw_number(self.coordinate2, self.rotate_left, [SSL] * 3)
+        self.graphics.draw_number(self.coordinate3, self.recent_rotate_number, [SSL] * 3)
 
         #random polygon
         # polygon_points = self._select_polygon_points(config["polygon_size"])
@@ -499,16 +502,17 @@ class Env(gym.Env):
 
     def step(self, action):
         self.wrong_forward = False
-        rotate_step = self.rotate_step
+        rotate_right = self.rotate_right
+        rotate_left = self.rotate_left
         recent_rotate = self.recent_rotate_number
         #TODO if null action is active it is required
-        if action!=2:
-                self.recent_actions.append(action)
+        # if action!=0:
+        self.recent_actions.append(action)
         if(len(self.recent_actions)>config['recent_actions_history']):
             del self.recent_actions[0]
 
 
-        self.recent_rotate_number = reduce(lambda x,y: x+1 if y==1 else x, [0, *self.recent_actions])
+        self.recent_rotate_number = reduce(lambda x,y: x+1 if (y==1 or y ==2) else x, [0, *self.recent_actions])
         self.coverage = float(self.graphics.draw_p) / float(self.graphics.target_p)
         if self._done == True:
             return np.uint8(self.graphics.pixels), 0 , True, {}
@@ -529,27 +533,56 @@ class Env(gym.Env):
                 self.wrong_forward_numbers = 0
 
             reward += temp_reward * (1 + self.coverage - self.basic_coverage) ** 3
-            self.rotate_step=0
+            self.rotate_left = 0
+            self.rotate_right = 0
 
-        elif action == 1:
-            self.rotate_step += 1
+        elif action == 1 or action == 2:
+            consec_rotate = 0
+            if action ==1:
+                self.rotate_right += 1
+                consec_rotate = self.rotate_right
+                if rotate_left>0:
+                    self.circular +=1
+                    reward -= self.circular*1000
+                else:
+                    self.circular = 0
+                self.rotate_left = 0
+                degree = DEGREE
+            if action == 2:
+                self.rotate_left += 1
+                consec_rotate = self.rotate_left
+                if rotate_right>0:
+                    self.circular += 1
+                    reward -= self.circular*1000
+                else:
+                    self.circular = 0
+                self.rotate_right = 0
+                degree = -DEGREE
             threshold = int(config['recent_actions_history']/1.8)
-            self._rotate(config['rotate_degree'] * DEGREE)
-            consecutive_rotate_threshold = (360/config['rotate_degree'])-1
-            if self.rotate_step > consecutive_rotate_threshold:
-                reward -= (self.rotate_step - consecutive_rotate_threshold) * 1000
+            self._rotate(config['rotate_degree'] * degree)
+            consecutive_rotate_threshold = 2
+            if consec_rotate > consecutive_rotate_threshold:
+                reward -= (consec_rotate - consecutive_rotate_threshold) * 1000
             if self.recent_rotate_number > threshold:
                 reward -= (self.recent_rotate_number- threshold)*1000
-        else:
-            pass
-        if action == 1 :
+
+
+
+
+        if action == 1 or action == 2:
             reward += self.calc_prospective_reward()
-        if self.rotate_step != rotate_step:
-            self.graphics.draw_number(self.coordinate, rotate_step, [SSL] * 3, clear=True)
-            self.graphics.draw_number(self.coordinate, self.rotate_step, [SSL] * 3)
+
+        if self.rotate_right != rotate_right:
+            self.graphics.draw_number(self.coordinate, rotate_right, [SSL] * 3, clear=True)
+            self.graphics.draw_number(self.coordinate, self.rotate_right, [SSL] * 3)
+
+        if self.rotate_left != rotate_left:
+            self.graphics.draw_number(self.coordinate2, rotate_left, [SSL] * 3, clear=True)
+            self.graphics.draw_number(self.coordinate2, self.rotate_left, [SSL] * 3)
+
         if self.recent_rotate_number != recent_rotate:
-            self.graphics.draw_number(self.coordinate2, recent_rotate, [SSL] * 3, clear=True)
-            self.graphics.draw_number(self.coordinate2, self.recent_rotate_number, [SSL] * 3)
+            self.graphics.draw_number(self.coordinate3, recent_rotate, [SSL] * 3, clear=True)
+            self.graphics.draw_number(self.coordinate3, self.recent_rotate_number, [SSL] * 3)
 
 
 
