@@ -16,7 +16,7 @@ FULL = 255.0
 SSL = 4 ## seven segment line
 config = {
     "channel_numbers": 4,
-    "maximum_steps": 35,
+    "maximum_steps": 45,
     "draw_channel": 0,
     "turtle_channel": 1,
     "target_channel": 2,
@@ -26,8 +26,8 @@ config = {
     "draw_punish": 10,
     "time_punish": 1,
     "use_gpu_array": False,
-    "target_line_width": 6,
-    "turtle_line_width": 3,
+    "target_line_width": 4,
+    "turtle_line_width": 2,
     "end_state_reward": 3000,
     "recent_actions_history": 30,
     "rotate_degree": 90,
@@ -132,13 +132,24 @@ class Graphics:
     def is_in_points(self, x, y, container):
         return any((x, y) in l for l in container)
 
+
+    def calc_base(self, channels, line_width, calc_reward):
+        if config["helper_channel"] in channels and calc_reward == False:
+            return 0
+        elif config['turtle_channel'] in channels:
+            return 0
+        else:
+            return -line_width
+
+
     def _plot(self, x, y, channels, inverse, line_width, calc_reward):
 
         reward, tr = 0, 0
         good_points_counter, bad_points_counter, tpc = 0, 0, 0
         line_width = int(line_width/2)
         repeated = True
-        base = 0 if (config["helper_channel"] in channels and calc_reward==False) else -line_width
+        base = self.calc_base(channels, line_width, calc_reward)
+
         for d in range(base, line_width):
             for d2 in range(base, line_width):
                 try:
@@ -213,7 +224,7 @@ class Graphics:
             a = array[0]
             line_width = config['target_line_width']
             if(chan!=config['target_channel']):
-                line_width = int(config['target_line_width']/3)
+                line_width = int(config['target_line_width']/2)
             if(a==0):
                 _, temp, _, _ = self.line(origin[0], origin[1], origin[0]+SSL[0], origin[1], chan, clear, line_width)
             elif(a==1):
@@ -303,7 +314,7 @@ class Env(gym.Env):
         self.height = height
         self.state = None
         self.maximum_steps = config['maximum_steps']
-        self.action_space = spaces.Discrete(2)
+        self.action_space = spaces.Discrete(3)
         self.observation_space = spaces.Box(low=0, high=255, shape=(height, width, 3))
         self.display = None
         self.coordinate = [int(self.width*1/16), int(self.width/18)]
@@ -359,7 +370,7 @@ class Env(gym.Env):
         y = random.sample(range(15, self.screen_height-45), 1)[0]
         origin = [x, y]
         size = np.random.choice(range(3,5), 3)*5
-        target_num = random.sample(range(2, 6), 1)
+        target_num = np.random.choice(range(2, 6), 1, p = [0.2, 0.2, 0.2, 0.4])
         self.graphics.draw_number(origin, target_num[0], size, chan=config['target_channel'])
         self.graphics.draw_number(self.coordinate, self.rotate_right, [SSL] * 3)
         self.graphics.draw_number(self.coordinate2, self.rotate_left, [SSL] * 3)
@@ -558,7 +569,7 @@ class Env(gym.Env):
                     self.circular = 0
                 self.rotate_right = 0
                 degree = -DEGREE
-            threshold = int(config['recent_actions_history']/1.8)
+            threshold = int(config['recent_actions_history']/2.5)
             self._rotate(config['rotate_degree'] * degree)
             consecutive_rotate_threshold = 2
             if consec_rotate > consecutive_rotate_threshold:
