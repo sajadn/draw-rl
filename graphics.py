@@ -315,7 +315,7 @@ class Env(gym.Env):
         self.height = height
         self.state = None
         self.maximum_steps = config['maximum_steps']
-        self.action_space = spaces.Discrete(4)
+        self.action_space = spaces.Discrete(5)
         self.observation_space = spaces.Box(low=0, high=255, shape=(height, width, 3))
         self.display = None
         self.coordinate = [int(self.width*1/16), int(self.width/18)]
@@ -331,7 +331,7 @@ class Env(gym.Env):
         angle_options = (np.arange(base - 2) + 1) * base_angle
         angle = 0
         rotate_degree = self.np_random.choice(angle_options , 3)
-        size = np.array(np.random.choice(range(3, 5), 3))*5
+        size = np.array(np.random.choice(range(3, 6), 3))*5
         points = []
         points.append(start)
         for i in range(num - 1):
@@ -370,8 +370,8 @@ class Env(gym.Env):
         x = random.sample(range(10,self.screen_width-30), 1)[0]
         y = random.sample(range(15, self.screen_height-45), 1)[0]
         origin = [x, y]
-        size = np.random.choice(range(3,5), 3)*5
-        target_num = np.random.choice(range(2, 7), 1)
+        size = np.random.choice(range(3,6), 3)*5
+        target_num = np.random.choice(range(1, 10), 1)
         self.graphics.draw_number(origin, target_num[0], size, chan=config['target_channel'])
         self.graphics.draw_number(self.coordinate, self.rotate_right, [SSL] * 3)
         self.graphics.draw_number(self.coordinate2, self.rotate_left, [SSL] * 3)
@@ -461,7 +461,8 @@ class Env(gym.Env):
         coverage = float(self.graphics.draw_p)/float(self.graphics.target_p)
         if coverage > 0.99:
             # print("coverage", coverage)
-            end_reward_coeff = (self.graphics.draw_p) / (self.graphics.draw_wrong_p*1.5 + self.graphics.draw_p)
+            # print("draw wrong number", self.graphics.draw_wrong_p)
+            end_reward_coeff = 0 if self.graphics.draw_wrong_p > 0 else 1
             return True, config['end_state_reward'] * end_reward_coeff
         if self.remaining_steps == 0:
             # print("coverage", coverage)
@@ -514,7 +515,9 @@ class Env(gym.Env):
 
     def step(self, action_input):
         if action_input == 3:
-            actions = [0,0,1,1,0,0]
+            actions = [0,0]
+        elif action_input ==4:
+            actions = [0,0,0,0]
         else:
             actions = [action_input]
         self.wrong_forward = False
