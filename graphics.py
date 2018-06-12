@@ -457,12 +457,13 @@ class Env(gym.Env):
         self.graphics.line(*p0, *p2, [config['turtle_channel']], clear, line_width=config['turtle_line_width'])
         self.graphics.line(*p1, *p2, [config['turtle_channel']], clear, line_width=config['turtle_line_width'])
 
-    def render(self, obs, mode='human', close=False):
+    def render(self, mode='human', closed = False):
         if(self.display==None):
             pygame.init()
             display = pygame.display.set_mode((self.width, self.height))
         # scipy.misc.imsave("sajad.png", obs.reshape(obs.shape[1], obs.shape[0]))
-        surf = pygame.surfarray.make_surface(obs)
+        data =  self.remove_helper_channel(self.graphics.pixels)
+        surf = pygame.surfarray.make_surface(data)
         display.blit(surf, (0, 0))
         pygame.display.update()
         return
