@@ -33,6 +33,10 @@ give reward of actions after moving on a repeated line for all the repeated line
 make the positive reward exponential 
 
 13 May
-make prospect reward exponential
-create reward for moving toward blue points when there is red line to them
++make prospect reward exponential
++create reward for moving toward blue points when there is red line to them
+
+15 May
+Unsuccessufl try to optimiize environment
+which one caused the problem? exponential prospect reward or reward for blue points near red ones tonigh we will test it
 
