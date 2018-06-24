@@ -11,7 +11,7 @@ def main():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
     parser.add_argument('--prioritized', type=int, default=1)
-    parser.add_argument('--dueling', type=int, default=0)
+    parser.add_argument('--dueling', type=int, default=1)
     parser.add_argument('--num-timesteps', type=int, default=int(3*10e6))
     args = parser.parse_args()
     logger.configure()
@@ -20,7 +20,7 @@ def main():
 
     current_milli_time = lambda: int(round(time.time() * 1000))
 
-    env = Env(64, 64)
+    env = Env(64, 44)
     env = WarpFrame(env)
     env = ScaledFloatFrame(env)
 
@@ -32,12 +32,12 @@ def main():
     act = deepq.learn(
         env,
         q_func=model,
-        lr=1e-4,
+        lr=5e-4,
         max_timesteps=args.num_timesteps,
         buffer_size=100000,
-        exploration_fraction=0.1,
+        exploration_fraction=0.05,
         exploration_final_eps=0.01,
-        train_freq=4,
+        train_freq=2,
         learning_starts=10000,
         target_network_update_freq=1000,
         gamma=0.99,
