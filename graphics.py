@@ -1,10 +1,12 @@
 import math
 from random import randint
+import random
 import gym
 import scipy.misc
 from gym.utils import seeding
 from gym import spaces
 import pygame
+from collections  import deque
 import time
 import random
 from functools import reduce
@@ -23,6 +25,7 @@ config = {
     "turtle_channel": 1,
     "target_channel": 2,
     "helper_channel": 3,
+    "start_channel": 4,
     "draw_reward": 2,
     "prospect_reward": [100],
     "draw_punish": 12,
@@ -37,7 +40,10 @@ config = {
     "prospect_width": 5,
     "prospect_length":[10],
     "forward_distance": 5,
-    "only_draw": True,
+    "draw": False,
+    "draw_random_start": False,
+    "edge_detection": False,
+    "select_start_point": False
 }
 
 if config["use_gpu_array"]:
@@ -48,6 +54,7 @@ else:
 
 class Graphics:
     def __init__(self, width=256, height=256, channels=4):
+
         self.pixels = np.zeros((width, height, channels))
 
     def reset(self):
@@ -191,7 +198,7 @@ class Graphics:
         for index, d in enumerate(digits):
             self.draw_digit([origin[0]+index*(SSL[0]+1), origin[1]], d, SSL, chan, clear)
 
-    def draw_digit(self, origin, num, SSL, chan, clear = False):
+    def draw_digit(self, origin, num, SSL, chan, clear = False, simulate = False):
         ss = []
         if(num==0):
             ss = [0, 1, 4, 6, 5, 2]
@@ -213,7 +220,10 @@ class Graphics:
             ss = [0, 1, 2, 3, 4, 5, 6]
         elif(num==9):
             ss = [0, 1, 2, 3, 5, 6]
-        self.draw_digit_line(origin, ss, SSL, chan, clear)
+        if simulate == True:
+            return ss
+        else:
+            self.draw_digit_line(origin, ss, SSL, chan, clear)
 
 
 #    ssl[0]
@@ -223,6 +233,23 @@ class Graphics:
 # |4    |5    ssl[2]
 # ------ 6
 #    ssl[0]
+
+    def give_line_num_points(self, a, origin, SSL):
+        if(a==0):
+            return [(origin[0], origin[1]), (origin[0]+SSL[0], origin[1])]
+        elif(a==1):
+            return [(origin[0], origin[1]), (origin[0], origin[1]+SSL[1])]
+        elif(a==2):
+            return [(origin[0]+SSL[0], origin[1]), (origin[0]+SSL[0], origin[1]+SSL[1])]
+        elif(a==3):
+            return [(origin[0], origin[1]+SSL[1]), (origin[0]+SSL[0], origin[1]+SSL[1])]
+        elif(a==4):
+            return [(origin[0], origin[1]+SSL[1]), (origin[0], origin[1]+SSL[1]+SSL[2])]
+        elif(a==5):
+            return [(origin[0]+SSL[0], origin[1]+SSL[1]), (origin[0]+SSL[0], origin[1]+SSL[1]+SSL[2])]
+        elif(a==6):
+            return [(origin[0], origin[1]+SSL[1]+SSL[2]), (origin[0]+SSL[0], origin[1]+SSL[1]+SSL[2])]
+
     def draw_digit_line(self, origin, array, SSL, chan, clear):
         while(len(array)>0):
             temp = 0
@@ -230,20 +257,8 @@ class Graphics:
             line_width = config['target_line_width']
             if(chan!=config['target_channel']):
                 line_width = int(config['target_line_width']/2)
-            if(a==0):
-                _, temp, _, _ = self.line(origin[0], origin[1], origin[0]+SSL[0], origin[1], chan, clear, line_width)
-            elif(a==1):
-                _, temp, _, _ = self.line(origin[0], origin[1], origin[0], origin[1]+SSL[1], chan, clear, line_width)
-            elif(a==2):
-                _, temp, _, _ = self.line(origin[0]+SSL[0], origin[1], origin[0]+SSL[0], origin[1]+SSL[1], chan, clear, line_width)
-            elif(a==3):
-                _, temp, _, _ = self.line(origin[0], origin[1]+SSL[1], origin[0]+SSL[0], origin[1]+SSL[1], chan, clear, line_width)
-            elif(a==4):
-                _, temp, _, _ = self.line(origin[0], origin[1]+SSL[1], origin[0], origin[1]+SSL[1]+SSL[2], chan, clear, line_width)
-            elif(a==5):
-                _, temp, _, _ = self.line(origin[0]+SSL[0], origin[1]+SSL[1], origin[0]+SSL[0], origin[1]+SSL[1]+SSL[2], chan, clear, line_width)
-            elif(a==6):
-                _, temp, _, _ = self.line(origin[0], origin[1]+SSL[1]+SSL[2], origin[0]+SSL[0], origin[1]+SSL[1]+SSL[2], chan, clear, line_width)
+            points = self.give_line_num_points(a, origin, SSL)
+            _, temp, _, _ = self.line(points[0][0], points[0][1], points[1][0], points[1][1], chan, clear, line_width)
             del array[0]
             if chan == config['target_channel']:
                 self.target_p += temp
@@ -312,20 +327,24 @@ class Env(gym.Env):
 
     def __init__(self, width=128, height=128):
         self._seed()
-
         self.state = None
         self.maximum_steps = config['maximum_steps']
 
-        if config['only_draw']==True:
-            self.action_space = spaces.Discrete(4)
-            config['maximum_steps'] = 45
-            width = 64
+        if config['draw']==True:
+            if config['select_start_point']:
+                self.action_space = spaces.Discrete(4)
+            else:
+                self.action_space = spaces.Discrete(4)
+            config['maximum_steps'] = 50
+            if config['edge_detection']:
+                config['maximum_steps'] = 6
+            width = 40
             height = 64
         else:
             self.action_space = spaces.Discrete(3)
             config['maximum_steps'] = 30
-            width = 84
-            height = 84
+            width = 100
+            height = 100
 
         self.screen_width = width
         self.screen_height = height
@@ -334,9 +353,9 @@ class Env(gym.Env):
         self.height = height
         self.observation_space = spaces.Box(low=0, high=255, shape=(height, width, 3))
         self.display = None
-        self.coordinate = [int(self.width*1/16), int(self.width/18)]
-        self.coordinate2 = [int(self.width*5/16), int(self.width/18)]
-        self.coordinate3 = [int(self.width*9/16), int(self.width / 18)]
+        self.coordinate = [5, int(self.width/18)]
+        self.coordinate2 = [17, int(self.width/18)]
+        self.coordinate3 = [29, int(self.width / 18)]
 
     def _select_polygon_points(self, num):
         x = self.np_random.randint(self.screen_width/2-6, self.screen_width/2+20, 1)
@@ -387,48 +406,84 @@ class Env(gym.Env):
             idxs[i] = np.minimum(np.maximum(idxs[i]+base, 0), [self.width, self.width, self.height, self.height])
         target_direction = self.count_not_target_points(idxs)
         if target_direction == 0:
-            return -300
+            return -100
         elif target_direction == 1:
-            return 300
+            return 100
         elif target_direction == 2:
             return 0
         elif target_direction>2:
-            return -200
+            return -50
         # return 0
+
+#TODO make repeat more annoying
+#TODO make all rewards negative
+
+    def fill_the_point(self, ps, clear = False):
+        width = int(config['target_line_width']/2)
+        for p in ps:
+            self.graphics.pixels[p[0]-width:p[0]+width, p[1]-width: p[1]+width, config['helper_channel']]= EMPTY if clear == True else FULL
+
+    def calc_available_starting_points(self, num):
+        if num == 1:
+            return [0, 2]
+        elif num == 2:
+            return range(4)
+        elif num == 3:
+            return range(4)
+        elif num == 4:
+            return [0, 1, 3]
+        elif num == 5:
+            return range(4)
+        elif num == 6:
+            return range(4)
+        elif num == 7:
+            return [0, 1, 3]
+        elif num == 8:
+            return range(4)
+        elif num == 9:
+            return range(4)
 
     def reset(self):
         self.repeated_forwards = 0
         self.circular = 0
         self.basic_coverage = 0
         self.graphics.reset()
-        self.angle = 0
+        self.start_candidates = []
         self.rotate_right = 0
         self.rotate_left = 0
         self.recent_actions = []
+        self.recent_rewards = deque(maxlen=10)
         self.recent_rotate_number = 0
         self.pen = True
         self.wrong_forward = False
         self.wrong_forward_numbers = 0
         self.consec_repeat = 1
         self.first_forward = True
-        self.before_pen = False if config['only_draw'] else True
+        self.before_pen = False if config['draw'] else True
         self.remaining_steps = self.maximum_steps
-        self.before_draw = False
-        if config['only_draw']:
-            x = 15
+        self.total_repeat = 0
+        self.before_draw = config['select_start_point']
+        if config['draw']:
+            x = 10
             y = 20
         else:
-            x = np.random.choice(range(2, 13))*5
-            y = np.random.choice(range(3, 9))*5
+            x = np.random.choice(range(3, int((self.width-40)/5)))*5
+            y = np.random.choice(range(5, int((self.width-60)/5)))*5
         self.origin = [x, y]
 
         size = np.array(np.random.choice(range(3,5), 3)*5).astype(int)
-        target_num = np.random.choice(range(1, 10), 1)
+        prob = [0.09375]*9
+        prob[1] = 0.25
+        target_num = np.random.choice(range(1, 10), size = 1)
         origin = self.origin
+
         self.corner_locations = [origin,
                        [origin[0]+size[0], origin[1]],
                        [origin[0], origin[1]+size[1]+size[2]],
                        [origin[0]+size[0], origin[1]+size[1]+size[2]]]
+
+
+
 
         self.graphics.draw_number(origin, target_num[0], size, chan=config['target_channel'])
         #self.graphics.draw_number(self.coordinate, self.rotate_right, [SSL] * 3)
@@ -441,20 +496,49 @@ class Env(gym.Env):
 
         #random rectangle
         # point = self.np_random.randint(10, self.screen_width/2, 2)
+
         # self.graphics.rect(*point, size[0], size[1])
-        if config['only_draw'] == True:
-            self.tx, self.ty = origin
+        if config['draw'] == True:
             self.no_repeat_boundary = 0
+            if config['edge_detection'] or config['draw_random_start']:
+                #if config['edge_detection']:
+                #TODO make it random
+                self.angle = np.random.choice([0, math.pi/2, -math.pi/2, math.pi])
+                lines = self.graphics.draw_digit(origin, target_num, SSL, 0, simulate = True)
+                line = np.random.choice(lines, 1)
+                ps = (np.array(self.graphics.give_line_num_points(line, origin, size))/5).astype(int)
+                self.tx = np.random.choice(range(ps[0][0], ps[1][0]+1))*5
+                self.ty = np.random.choice(range(ps[0][1], ps[1][1]+1))*5
+                self.ot = [self.tx, self.ty]
+            else:
+                 self.angle = 0
+                 options = self.calc_available_starting_points(target_num)
+                 start = np.array(self.corner_locations)[options]
+                 available_points =  sorted(np.random.choice(range(len(start)), size = np.random.randint(2, len(start)+1), replace = False))
+                 self.start_point = start[available_points]
+                 self.start_point = self.corner_locations
+                 self.tx, self.ty = self.start_point[np.random.randint(len(self.start_point))]
+                 if config['select_start_point']:
+                    self.fill_the_point(self.start_point)
             #self.no_repeat_boundary = max(size[0], size[1], size[2])*2/5
         else:
-            self.tx, self.ty = 10, 15
+            self.angle = 0
+            x_opt = [5, self.width-10, int((self.width-10)/2)]
+            self.tx = np.random.choice(x_opt)
+            self.tx = x_opt[0]
+            y_opt = [20, self.height-10, int((self.height-10)/2)]
+            if self.tx == x_opt[2]:
+                del y_opt[2]
+            self.ty = np.random.choice(y_opt)
+            self.ty = y_opt[0]
             
 
         self.graphics.draw_number(self.coordinate, self.rotate_right, [SSL] * 3)
         self.graphics.draw_number(self.coordinate2, self.rotate_left, [SSL] * 3)
         self.graphics.draw_number(self.coordinate3, self.recent_rotate_number, [SSL] * 3)
 
-        self._draw_turtle()
+        if config['select_start_point']==False:
+            self._draw_turtle()
         self._done = False
         self.initial_distance = self.calc_distance(self.tx, self.ty)
         self.total_diff = 0
@@ -469,7 +553,7 @@ class Env(gym.Env):
         reward, p, repeated = 0, 0, False
         cx = int(distance * math.cos(self.angle))
         cy = int(distance * math.sin(self.angle))
-        if (self.tx + cx > (self.screen_width+5) or self.ty + cy > (self.screen_height+5) or self.ty + cy < SSL-5 or self.tx + cx < -5):
+        if (self.tx + cx >= (self.screen_width+5) or self.ty + cy >= (self.screen_height+5) or self.ty + cy < SSL-5 or self.tx + cx < -5):
             self._rotate(math.pi, False)
             cx = int(distance * math.cos(self.angle))
             cy = int(distance * math.sin(self.angle))
@@ -496,14 +580,14 @@ class Env(gym.Env):
             self.angle -= 2 * math.pi
 
     def _draw_turtle(self, clear=False):
-        cx = int(self.width/5 * math.cos(self.angle))
-        cy = int(self.width/5 * math.sin(self.angle))
+        cx = int(12 * math.cos(self.angle))
+        cy = int(12 * math.sin(self.angle))
         p0 = (self.tx + cx, self.ty + cy)
-        cx = int(self.width/15 * math.cos(self.angle + math.pi / 2.))
-        cy = int(self.width/15 * math.sin(self.angle + math.pi / 2.))
+        cx = int(4 * math.cos(self.angle + math.pi / 2.))
+        cy = int(4 * math.sin(self.angle + math.pi / 2.))
         p1 = (self.tx + cx, self.ty + cy)
-        cx = int(self.width/15 * math.cos(self.angle - math.pi / 2.))
-        cy = int(self.width/15 * math.sin(self.angle - math.pi / 2.))
+        cx = int(4 * math.cos(self.angle - math.pi / 2.))
+        cy = int(4 * math.sin(self.angle - math.pi / 2.))
         p2 = (self.tx + cx, self.ty + cy)
         self.graphics.line(*p0, *p1, [config['turtle_channel']], clear, line_width=config['turtle_line_width'])
         self.graphics.line(*p0, *p2, [config['turtle_channel']], clear, line_width=config['turtle_line_width'])
@@ -513,7 +597,6 @@ class Env(gym.Env):
         if(self.display==None):
             pygame.init()
             display = pygame.display.set_mode((self.width, self.height))
-        # time.sleep(0.01)
         temp = self.graphics.pixels[:,:,1] + self.graphics.pixels[:,:,3]
         data = np.uint8(np.stack((self.graphics.pixels[:,:,0], temp, self.graphics.pixels[:,:,2]), axis = 2))
         surf = pygame.surfarray.make_surface(data)
@@ -524,12 +607,31 @@ class Env(gym.Env):
 
     def _is_done(self):
         coverage = float(self.graphics.draw_p)/float(self.graphics.target_p)
-        if coverage > 0.99:
+        if config['edge_detection'] == False and coverage > 0.99:
             end_reward_coeff = 1 if self.graphics.draw_wrong_p < (self.graphics.target_p/10) else 0
             #end_reward_coeff2 = (self.graphics.draw_p) / (self.graphics.draw_wrong_p*1.5 + self.graphics.draw_p)
-            return True, config['end_state_reward'] * end_reward_coeff
-        if self.calc_distance(self.tx, self.ty)==0 and self.before_pen == True:
+            if config['draw_random_start']:
+                self.graphics.pixels[:,:,  config['helper_channel']] = EMPTY
+                self.fill_the_point(self.start_candidates)
+                #print("candidate", self.start_candidates)
+            return True, max((config['end_state_reward']-self.total_repeat*180), 100) * end_reward_coeff
+        if self.before_pen == True and self.graphics.pixels[min(self.tx, self.width-1), min(self.ty, self.height-1), config['target_channel']]==FULL:
             return True, config['end_state_reward']
+        if config["draw"] and  (config["edge_detection"] or config['draw_random_start']):
+            #right_reward = self.calc_prospective_reward(self.angle+config['rotate_degree']*DEGREE)
+            #left_reward =  self.calc_prospective_reward(self.angle-config['rotate_degree']*DEGREE)
+            #print(right_reward, left_reward)
+            #if right_reward>0 or left_reward>0:
+            #   return True, config['end_state_reward']
+            if len(self.recent_actions)>0 and self.recent_rewards[-1]>(-config['time_punish']) and self.recent_actions[-1]==0:
+                right_reward = self.calc_prospective_reward(self.angle+config['rotate_degree']*DEGREE)
+                left_reward =  self.calc_prospective_reward(self.angle-config['rotate_degree']*DEGREE)
+                forward_reward = self.calc_prospective_reward(self.angle)
+                if right_reward>0 or left_reward>0:
+                    self.start_candidates.append((self.tx, self.ty))
+                if right_reward<=0 and left_reward<=0 and forward_reward<=0:
+                    self.start_candidates.append((self.tx, self.ty))
+
         if self.remaining_steps == 0:
             return True, 0
         return False, 0
@@ -541,23 +643,27 @@ class Env(gym.Env):
 #change logger
 # make lines thicker
 
-    def calc_prepend_points(self, p):
-        width = config['prospect_width']
-        p1y = math.sin(self.angle + math.pi / 2) * width + p[1]
-        p1x = math.cos(self.angle + math.pi / 2) * width + p[0]
-        p2y = math.sin(self.angle - math.pi / 2) * width + p[1]
-        p2x = math.cos(self.angle - math.pi / 2) * width + p[0]
+    def calc_prepend_points(self, p, angle, width):
+        p1y = math.sin(angle + math.pi / 2) * width + p[1]
+        p1x = math.cos(angle + math.pi / 2) * width + p[0]
+        p2y = math.sin(angle - math.pi / 2) * width + p[1]
+        p2x = math.cos(angle - math.pi / 2) * width + p[0]
         return ((int(p1x), int(p1y)), (int(p2x), int(p2y)))
 
-    def calc_prospective_reward(self):
-        fps = self.calc_prepend_points((self.tx+math.cos(self.angle)*config['target_line_width']/2, self.ty + math.sin(self.angle)*config['target_line_width']/2))
+    def calc_prospective_reward(self, angle=None):
+        if angle == None:
+            angle = self.angle
+            prospect_width = config['prospect_width']
+        else:
+            prospect_width = config['target_line_width']/2
+        fps = self.calc_prepend_points((self.tx+math.cos(angle)*config['target_line_width']/2, self.ty + math.sin(angle)*config['target_line_width']/2), angle, prospect_width)
         prospect = config['prospect_length']
         npoint = []
         for pr in prospect:
-            npoint.append((math.cos(self.angle)*pr+self.tx, math.sin(self.angle)*pr+self.ty))
+            npoint.append((math.cos(angle)*pr+self.tx, math.sin(angle)*pr+self.ty))
         sps = []
         for nps in npoint:
-            sps.append(self.calc_prepend_points(nps))
+            sps.append(self.calc_prepend_points(nps, angle, prospect_width))
         #TODO does not work properly for fractional degrees
         prospect_reward = []
         for index, point in enumerate(sps):
@@ -569,7 +675,7 @@ class Env(gym.Env):
             maxy = min(max(ys), self.screen_height)
             rectangle_view = np.array(self.graphics.pixels[minx:maxx, miny:maxy,:])
             target_points = np.logical_and(rectangle_view[:,:,config['target_channel']]==FULL, rectangle_view[:,:,config['draw_channel']]==EMPTY)
-            total_points = 2*config['prospect_width']*prospect[index]
+            total_points = 2*prospect_width*prospect[index]
             prospect_reward.append(np.count_nonzero(target_points)/total_points)
         rewards = prospect_reward * np.array(config['prospect_reward'])
         rewards *= (1 + self.coverage - self.basic_coverage)**3
@@ -585,7 +691,7 @@ class Env(gym.Env):
             reward -= 100
         if self.first_forward == True:
             if one_step_reward>35:
-                one_step_reward = 41 + config['time_punish']
+                one_step_reward = 41
             self.first_forward = False
         if self.wrong_forward:
             self.wrong_forward_numbers +=1
@@ -620,25 +726,29 @@ class Env(gym.Env):
         if diff> 0:
             temp = 1.9
         reward -= int(dist2)**2/temp
-        return reward
+        return 0
 
 
     def step(self, action_input):
         self._draw_turtle(True)
         reward, self.coverage = 0, 0
-        if action_input == 3:
-            actions = [0,0,1,1,0,0]
-        else:
-            actions = [action_input]
+
+
         if self.before_draw:
-            loc = self.corner_locations[action_input]
-            self.tx, self.ty = loc[0], loc[1]
+            act = action_input%len(self.start_point)
+            self.tx, self.ty = self.start_point[act]
             self.before_draw = False
-            self.graphics.draw_number(self.coordinate, self.rotate_right, [SSL] * 3)
-            self.graphics.draw_number(self.coordinate2, self.rotate_left, [SSL] * 3)
-            self.graphics.draw_number(self.coordinate3, self.recent_rotate_number, [SSL] * 3)
-            reward = self.initial_point_reward(loc)
+            self.fill_the_point(self.start_point, clear = True)
+            reward = self.initial_point_reward(self.start_point[act])
         else:
+            if action_input == 3:
+                if config['draw']:
+                    actions = [0,0,1,1,0,0]
+                if config['edge_detection']:
+                    actions = [1, 1]
+            else:
+                action_input %= self.action_space.n
+                actions = [action_input]
             self.wrong_forward = False
             rotate_right = self.rotate_right
             rotate_left = self.rotate_left
@@ -654,12 +764,20 @@ class Env(gym.Env):
                     del self.recent_actions[0]
                 self.recent_rotate_number = reduce(lambda x,y: x+1 if (y==1 or y ==2) else x, [0, *self.recent_actions])
                 self.coverage = float(self.graphics.draw_p) / float(self.graphics.target_p)
+                if config['draw']:
+                    if config['edge_detection']:
+                        config['time_punish'] = 200
+                    else:
+                        config['time_punish'] = 300
+                else:
+                    config['time_punish'] = 100
                 reward -= config['time_punish']
                 distance = self.calc_distance(self.tx, self.ty)
                 if self._done == True:
                     return np.uint8(self.graphics.pixels), 0 , True, {'coverage': 0}
                 if action == 0:
                     one_step_reward, repeated, _ = self._forward(config['forward_distance'], pen = not self.before_pen)
+                    self.total_repeat += 1 if repeated else 0
                     if self.before_pen == False:
                        reward += self.calc_draw_reward(index, repeated, one_step_reward)
                     elif self.before_pen:
@@ -733,6 +851,8 @@ class Env(gym.Env):
                 # if(self.pen==False):
                     # self.pen_repeat = True
                 # self.pen = not self.pen
+
+            self.recent_rewards.append(reward)
             self._done, tr = self._is_done()
             reward += tr
         self._draw_turtle(False)
