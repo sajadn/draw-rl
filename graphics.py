@@ -8,6 +8,7 @@ from gym import spaces
 import pygame
 from collections  import deque
 import time
+
 import random
 from functools import reduce
 from collections import deque
@@ -27,20 +28,20 @@ config = {
     "helper_channel": 3,
     "start_channel": 4,
     "draw_reward": 2,
-    "prospect_reward": [100],
+    "prospect_reward": [150],
     "draw_punish": 12,
     "time_punish": 1,
     "use_gpu_array": False,
     "target_line_width": 4,
     "turtle_line_width": 2,
-    "end_state_reward": 2000,
+    "end_state_reward": 5000,
     "recent_actions_history": 30,
     "rotate_degree": 90,
     "polygon_size": 4,
     "prospect_width": 5,
     "prospect_length":[10],
     "forward_distance": 5,
-    "draw": False,
+    "draw": True,
     "draw_random_start": False,
     "edge_detection": False,
     "select_start_point": False
@@ -332,10 +333,10 @@ class Env(gym.Env):
 
         if config['draw']==True:
             if config['select_start_point']:
-                self.action_space = spaces.Discrete(4)
+                self.action_space = spaces.Discrete(6)
             else:
                 self.action_space = spaces.Discrete(4)
-            config['maximum_steps'] = 50
+            config['maximum_steps'] = 55
             if config['edge_detection']:
                 config['maximum_steps'] = 6
             width = 40
@@ -344,7 +345,7 @@ class Env(gym.Env):
             self.action_space = spaces.Discrete(3)
             config['maximum_steps'] = 30
             width = 100
-            height = 100
+            height = 110
 
         self.screen_width = width
         self.screen_height = height
@@ -367,6 +368,7 @@ class Env(gym.Env):
         angle = 0
         rotate_degree = self.np_random.choice(angle_options , 3)
         size = np.array(np.random.choice(range(3, 5), 3))*5
+        #size = [3,3,4]
         points = []
         points.append(start)
         for i in range(num - 1):
@@ -406,13 +408,13 @@ class Env(gym.Env):
             idxs[i] = np.minimum(np.maximum(idxs[i]+base, 0), [self.width, self.width, self.height, self.height])
         target_direction = self.count_not_target_points(idxs)
         if target_direction == 0:
-            return -100
+            return -300
         elif target_direction == 1:
-            return 100
+            return 300
         elif target_direction == 2:
             return 0
         elif target_direction>2:
-            return -50
+            return -200
         # return 0
 
 #TODO make repeat more annoying
@@ -425,23 +427,23 @@ class Env(gym.Env):
 
     def calc_available_starting_points(self, num):
         if num == 1:
-            return [0, 2]
+            return [0, 4]
         elif num == 2:
-            return range(4)
+            return range(6)
         elif num == 3:
-            return range(4)
+            return range(6)
         elif num == 4:
-            return [0, 1, 3]
+            return [0, 1, 2, 3, 5]
         elif num == 5:
-            return range(4)
+            return range(6)
         elif num == 6:
-            return range(4)
+            return range(6)
         elif num == 7:
-            return [0, 1, 3]
+            return [0, 1, 5]
         elif num == 8:
-            return range(4)
+            return range(6)
         elif num == 9:
-            return range(4)
+            return range(6)
 
     def reset(self):
         self.repeated_forwards = 0
@@ -461,24 +463,28 @@ class Env(gym.Env):
         self.first_forward = True
         self.before_pen = False if config['draw'] else True
         self.remaining_steps = self.maximum_steps
-        self.total_repeat = 0
+        self.total_repeat = 1
         self.before_draw = config['select_start_point']
+
         if config['draw']:
             x = 10
             y = 20
         else:
-            x = np.random.choice(range(3, int((self.width-40)/5)))*5
-            y = np.random.choice(range(5, int((self.width-60)/5)))*5
+            x = np.random.choice(range(3, 16))*5
+            y = np.random.choice(range(6, 13))*5
         self.origin = [x, y]
 
         size = np.array(np.random.choice(range(3,5), 3)*5).astype(int)
-        prob = [0.09375]*9
-        prob[1] = 0.25
+        #size = [15, 15, 20]
+        prob = [0.9]*9
+        prob[1] = 0.2
         target_num = np.random.choice(range(1, 10), size = 1)
         origin = self.origin
 
         self.corner_locations = [origin,
                        [origin[0]+size[0], origin[1]],
+                       [origin[0], origin[1]+size[1]],
+                       [origin[0]+size[0], origin[1]+size[1]],
                        [origin[0], origin[1]+size[1]+size[2]],
                        [origin[0]+size[0], origin[1]+size[1]+size[2]]]
 
@@ -496,7 +502,6 @@ class Env(gym.Env):
 
         #random rectangle
         # point = self.np_random.randint(10, self.screen_width/2, 2)
-
         # self.graphics.rect(*point, size[0], size[1])
         if config['draw'] == True:
             self.no_repeat_boundary = 0
@@ -516,21 +521,22 @@ class Env(gym.Env):
                  start = np.array(self.corner_locations)[options]
                  available_points =  sorted(np.random.choice(range(len(start)), size = np.random.randint(2, len(start)+1), replace = False))
                  self.start_point = start[available_points]
-                 self.start_point = self.corner_locations
+                 #self.start_point = start
                  self.tx, self.ty = self.start_point[np.random.randint(len(self.start_point))]
                  if config['select_start_point']:
                     self.fill_the_point(self.start_point)
             #self.no_repeat_boundary = max(size[0], size[1], size[2])*2/5
         else:
             self.angle = 0
-            x_opt = [5, self.width-10, int((self.width-10)/2)]
-            self.tx = np.random.choice(x_opt)
-            self.tx = x_opt[0]
-            y_opt = [20, self.height-10, int((self.height-10)/2)]
-            if self.tx == x_opt[2]:
-                del y_opt[2]
-            self.ty = np.random.choice(y_opt)
-            self.ty = y_opt[0]
+            x_opt = [5, 10, 15]
+            self.tx = np.random.choice(x_opt, p = [0.6, 0.2, 0.2])
+            #self.tx = x_opt[0]
+            y_opt = [20, 25, 30]
+            if self.tx == x_opt[0]:
+                self.ty = np.random.choice(y_opt)
+            else:
+                self.ty = 20
+            #self.ty = y_opt[0]
             
 
         self.graphics.draw_number(self.coordinate, self.rotate_right, [SSL] * 3)
@@ -545,6 +551,7 @@ class Env(gym.Env):
         self.maximum_moving_step = int(math.sqrt((self.initial_distance**2)/2)/config['forward_distance']*1.3)*2+3
         # num = self.np_random.randint(3, 8)
         # self._draw_polygon(num)
+
         return np.uint8(self.graphics.pixels)
 
     def _forward(self, distance, pen = True, simulate = False):
@@ -614,8 +621,22 @@ class Env(gym.Env):
                 self.graphics.pixels[:,:,  config['helper_channel']] = EMPTY
                 self.fill_the_point(self.start_candidates)
                 #print("candidate", self.start_candidates)
-            return True, max((config['end_state_reward']-self.total_repeat*180), 100) * end_reward_coeff
+            #coeff = 1+6*self.remaining_steps/self.maximum_steps
+            #print("COEEFFF", coeff)
+            #print("total_repeat", self.total_repeat)
+            return True, max(((config['end_state_reward']-self.total_repeat*200)/self.total_repeat),200) * end_reward_coeff
         if self.before_pen == True and self.graphics.pixels[min(self.tx, self.width-1), min(self.ty, self.height-1), config['target_channel']]==FULL:
+            self.fx = self.origin[0] - 10
+            self.sx = self.origin[0] + 30
+            self.fy = self.origin[1] - int(config['target_line_width']/2)
+            self.sy = self.origin[1] + 40
+            self.pixels = self.graphics.pixels[self.fx:sx, fy:sy, :]
+            temp = self.graphics.pixels[:,:,1] + self.graphics.pixels[:,:,3]
+            data = np.uint8(np.stack((self.graphics.pixels[:,:,0], temp, self.graphics.pixels[:,:,2]), axis = 2))
+            shape = data[fx:sx, fy:sy, :]
+            header = data[0:40, 0:18, :]
+            cut = np.hstack((header, shape))
+            scipy.misc.imsave('1.jpg', np.flip(cut, axis = 0))
             return True, config['end_state_reward']
         if config["draw"] and  (config["edge_detection"] or config['draw_random_start']):
             #right_reward = self.calc_prospective_reward(self.angle+config['rotate_degree']*DEGREE)
@@ -632,7 +653,7 @@ class Env(gym.Env):
                 if right_reward<=0 and left_reward<=0 and forward_reward<=0:
                     self.start_candidates.append((self.tx, self.ty))
 
-        if self.remaining_steps == 0:
+        if self.remaining_steps <= 0:
             return True, 0
         return False, 0
 
@@ -678,7 +699,7 @@ class Env(gym.Env):
             total_points = 2*prospect_width*prospect[index]
             prospect_reward.append(np.count_nonzero(target_points)/total_points)
         rewards = prospect_reward * np.array(config['prospect_reward'])
-        rewards *= (1 + self.coverage - self.basic_coverage)**3
+        rewards *= ((1 + self.coverage - self.basic_coverage)*self.turn_effect)**3
         return sum(rewards)
 
 
@@ -703,12 +724,11 @@ class Env(gym.Env):
             one_step_reward *= ( index * 0.2 + 1 )
         if one_step_reward < 0 and repeated == True:
             self.consec_repeat += 1
-            self.consec_repeat = min(self.consec_repeat, 3)
+            self.consec_repeat = min(self.consec_repeat, 2)
         else:
-            one_step_reward *= self.consec_repeat
+            #one_step_reward *= self.consec_repeat
             self.consec_repeat = 1
-
-        reward += one_step_reward  * (1 + self.coverage - self.basic_coverage) ** 3
+        reward += one_step_reward  * ((1 + self.coverage - self.basic_coverage)*self.turn_effect) ** 3
         return reward
 
     def calc_before_pen_reward(self, action, distance):
@@ -733,13 +753,12 @@ class Env(gym.Env):
         self._draw_turtle(True)
         reward, self.coverage = 0, 0
 
-
         if self.before_draw:
             act = action_input%len(self.start_point)
             self.tx, self.ty = self.start_point[act]
             self.before_draw = False
             self.fill_the_point(self.start_point, clear = True)
-            reward = self.initial_point_reward(self.start_point[act])
+            #reward = self.initial_point_reward(loc)
         else:
             if action_input == 3:
                 if config['draw']:
@@ -747,7 +766,7 @@ class Env(gym.Env):
                 if config['edge_detection']:
                     actions = [1, 1]
             else:
-                action_input %= self.action_space.n
+                action_input %= 4
                 actions = [action_input]
             self.wrong_forward = False
             rotate_right = self.rotate_right
@@ -756,9 +775,10 @@ class Env(gym.Env):
             #TODO if null action is active it is required
             # if action!=0:
 
-
-            self.remaining_steps -= 1
             for index, action in enumerate(actions):
+                self.remaining_steps -= 1
+                self.turn_effect = 1+ self.remaining_steps/self.maximum_steps
+                #self.turn_effect = 1
                 self.recent_actions.append(action)
                 if len(self.recent_actions) > config['recent_actions_history']:
                     del self.recent_actions[0]
@@ -768,7 +788,7 @@ class Env(gym.Env):
                     if config['edge_detection']:
                         config['time_punish'] = 200
                     else:
-                        config['time_punish'] = 300
+                        config['time_punish'] = 1
                 else:
                     config['time_punish'] = 100
                 reward -= config['time_punish']
@@ -791,7 +811,7 @@ class Env(gym.Env):
                         consec_rotate = self.rotate_right
                         if rotate_left>0:
                             self.circular +=1
-                            reward -= self.circular*1000
+                            reward -= self.circular*2000
                         else:
                             self.circular = 0
                         self.rotate_left = 0
@@ -801,7 +821,7 @@ class Env(gym.Env):
                         consec_rotate = self.rotate_left
                         if rotate_right>0:
                             self.circular += 1
-                            reward -= self.circular*1000
+                            reward -= self.circular*2000
                         else:
                             self.circular = 0
                         self.rotate_right = 0
@@ -810,9 +830,9 @@ class Env(gym.Env):
                     self._rotate(config['rotate_degree'] * degree)
                     consecutive_rotate_threshold = 2
                     if consec_rotate > consecutive_rotate_threshold:
-                        reward -= (consec_rotate - consecutive_rotate_threshold) * 1000
+                        reward -= (consec_rotate - consecutive_rotate_threshold) * 2000
                     if self.recent_rotate_number > threshold:
-                        reward -= (self.recent_rotate_number- threshold)*1000
+                        reward -= (self.recent_rotate_number- threshold)*2000
                     if not self.before_pen:
                         reward += self.calc_prospective_reward()
                     else:
@@ -856,6 +876,7 @@ class Env(gym.Env):
             self._done, tr = self._is_done()
             reward += tr
         self._draw_turtle(False)
+
         return np.uint8(self.graphics.pixels), reward, self._done, {'coverage': self.coverage}
 
 import time
